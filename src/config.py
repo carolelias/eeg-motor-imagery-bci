@@ -26,33 +26,17 @@ FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
 # --------------------------------------------------------------------------
 # Sujeitos e sessões do Dataset 2b
 # --------------------------------------------------------------------------
-# O Dataset 2b contém 9 sujeitos. Para cada sujeito há 5 sessões:
-#   01T, 02T -> sessões de treinamento SEM realimentação visual (screening)
-#   03T      -> sessão de treinamento COM realimentação visual (smiley)
-#   04E, 05E -> sessões de avaliação COM realimentação visual (smiley)
-#
-# Seguindo o protocolo oficial da competição (Leeb et al., 2008), as três
-# primeiras sessões (01T, 02T, 03T) possuem rótulos de classe disponíveis e
-# são usadas para treinar o classificador. As sessões 04E e 05E são usadas
-# para avaliação. No pacote de dados completo (pós-competição), todas as
-# sessões já vêm com rótulos, o que permite uma avaliação fim-a-fim.
-SUBJECT_IDS = list(range(1, 10))  # Sujeitos de 1 a 9
+# Sessões 01T-03T têm rótulos de classe disponíveis e são usadas para treino.
+# As sessões 04E/05E não embutem os rótulos nos arquivos GDF — foram
+# distribuídos em formato .mat separado. Por isso, a avaliação é feita por
+# validação cruzada sobre as sessões de treino.
+SUBJECT_IDS = list(range(1, 10))
 
 TRAIN_SESSION_SUFFIXES = ["01T", "02T", "03T"]
-# Os arquivos GDF das sessões de avaliação (04E, 05E) não contêm os rótulos
-# de classe nos eventos — ambos os eventos 781 e 783 aparecem em TODOS os
-# trials independentemente da classe (são marcadores do protocolo de feedback
-# online, não rótulos). Os rótulos verdadeiros foram distribuídos pelos
-# organizadores em formato MATLAB separado (.mat). Por isso, a avaliação em
-# conjunto de teste independente não é realizada nesta versão do código;
-# a métrica principal é o Kappa de Cohen obtido pela validação cruzada sobre
-# as sessões de treino (01T + 02T + 03T).
-TEST_SESSION_SUFFIXES = []  # desativado — ver comentário acima
+TEST_SESSION_SUFFIXES = []  # desativado — rótulos não disponíveis nos GDF
 
-# Sessões com problema técnico conhecido no bloco de calibração de EOG
-# (não afeta os trials de imagética motora, apenas o bloco inicial de 5 min
-# usado para estimativa de artefatos oculares). Ver descrição oficial do
-# dataset (Leeb et al., 2008), Tabela 1.
+# Sessões com problema técnico no bloco de calibração de EOG
+# (não afeta os trials de imagética motora).
 SESSIONS_WITHOUT_EOG_CALIBRATION = ["B0102T", "B0504E"]
 
 
@@ -66,9 +50,7 @@ def subject_filename(subject_id: int, suffix: str) -> str:
 # --------------------------------------------------------------------------
 # Canais
 # --------------------------------------------------------------------------
-# Nomenclatura dos canais como aparece nos arquivos .gdf originais da
-# competição. Os 3 primeiros são EEG (montagem bipolar centrada em C3/Cz/C4)
-# e os 3 últimos são EOG (montagem monopolar, ver Figura 2 da documentação).
+# Nomenclatura original dos arquivos .gdf (3 EEG bipolares + 3 EOG monopolares).
 RAW_EEG_CHANNEL_NAMES = ["EEG:C3", "EEG:Cz", "EEG:C4"]
 RAW_EOG_CHANNEL_NAMES = ["EOG:ch01", "EOG:ch02", "EOG:ch03"]
 
@@ -88,13 +70,11 @@ EOG_CHANNELS = ["EOG1", "EOG2", "EOG3"]
 # --------------------------------------------------------------------------
 # Códigos de eventos (conforme Tabela 2 da documentação oficial do dataset)
 # --------------------------------------------------------------------------
-EVENT_CUE_LEFT = 769    # Imagética motora: mão esquerda (classe 1) — sessões de treino
-EVENT_CUE_RIGHT = 770   # Imagética motora: mão direita (classe 2) — sessões de treino
-# Nas sessões de avaliação (04E, 05E), o cue/rótulo de classe é codificado
-# com valores diferentes: 781 para mão esquerda e 783 para mão direita.
-# Isso é padrão do Dataset 2b (ver Leeb et al., 2008, Tabela 2).
-EVENT_CUE_LEFT_EVAL = 781    # rótulo de classe: mão esquerda, sessões de avaliação
-EVENT_CUE_RIGHT_EVAL = 783   # rótulo de classe: mão direita, sessões de avaliação
+EVENT_CUE_LEFT = 769    # mão esquerda — sessões de treino
+EVENT_CUE_RIGHT = 770   # mão direita — sessões de treino
+# Nas sessões de avaliação os cues têm códigos diferentes (ver Tabela 2 da documentação).
+EVENT_CUE_LEFT_EVAL = 781
+EVENT_CUE_RIGHT_EVAL = 783
 EVENT_REJECTED_TRIAL = 1023  # Trial marcado como contendo artefato
 
 # Mapeamento de classes para os rótulos usados pelo scikit-learn.
@@ -113,53 +93,29 @@ BANDPASS_LOW_FREQ = 8.0
 BANDPASS_HIGH_FREQ = 30.0
 FILTER_ORDER_IIR = 4  # ordem do filtro Butterworth
 
-# Frequência da rede elétrica na Áustria (local de gravação do dataset) é
-# 50 Hz. O próprio dataset já é fornecido com filtro notch em 50 Hz
-# (ver documentação oficial), mas mantemos a opção configurável aqui para
-# eventual reaplicação em outros datasets com diferentes ruídos de rede.
+# O dataset já vem com filtro notch em 50 Hz aplicado.
 NOTCH_FREQ = 50.0
-APPLY_NOTCH_FILTER = False  # já vem filtrado de fábrica nesse dataset
+APPLY_NOTCH_FILTER = False
 
 # --------------------------------------------------------------------------
 # Parâmetros de epoching (segmentação em épocas)
 # --------------------------------------------------------------------------
-# Os eventos 769/770 (cue onset) marcam o instante em que a seta indicativa
-# da classe é mostrada na tela. Definimos a janela de análise relativa a
-# esse instante.
-#
-# Janela escolhida: [+0.5s, +3.5s] após o cue.
-#   - Evita os primeiros ~0.5s, período em que o Potencial Evocado Visual
-#     (VEP) gerado pela própria seta (cue) ainda domina o sinal, o que
-#     poderia levar o classificador a aprender a discriminar o estímulo
-#     visual em vez da imagética motora em si.
-#   - A imagética motora efetivamente ocorre entre +1s e +4s relativo ao
-#     início do trial (= entre +0s e +3s relativo ao cue, que ocorre em
-#     t=1s no timeline do trial). Mantemos uma janela de 3s dentro desse
-#     intervalo, começando 0.5s após o cue para dar tempo de a dessincro-
-#     nização (ERD) se estabelecer.
-EPOCH_TMIN = 0.5   # segundos, relativo ao evento de cue (769/770)
-EPOCH_TMAX = 3.5   # segundos, relativo ao evento de cue (769/770)
+# Janela [+0.5s, +3.5s] relativa ao cue: os primeiros 0.5s são descartados
+# para evitar contaminação pelo VEP gerado pelo estímulo visual (a seta).
+EPOCH_TMIN = 0.5
+EPOCH_TMAX = 3.5
 
-# Janela de baseline usada para normalização de algumas análises
-# exploratórias (ex.: cálculo de ERD% relativo). Não é usada na extração
-# de características via CSP, que opera diretamente sobre a época "crua"
-# filtrada.
+# Janela de baseline para análises exploratórias de ERD; não usada no CSP.
 BASELINE_TMIN = -1.0
 BASELINE_TMAX = 0.0
 
-# Critério simples de rejeição de épocas por amplitude excessiva (artefato
-# residual não capturado pela regressão de EOG). Valor em Volts, pois o MNE
-# trabalha internamente em Volts (os dados brutos do GDF estão em microV,
-# mas o MNE já faz a conversão automaticamente ao carregar).
-REJECT_PEAK_TO_PEAK = dict(eeg=150e-6)  # 150 microV
+# Rejeição de épocas por amplitude excessiva (MNE usa Volts internamente).
+REJECT_PEAK_TO_PEAK = dict(eeg=150e-6)  # 150 µV
 
 # --------------------------------------------------------------------------
 # Parâmetros de extração de características (CSP)
 # --------------------------------------------------------------------------
-# Número de componentes CSP. Como há apenas 3 canais de EEG no Dataset 2b
-# (C3, Cz, C4), o número máximo de componentes CSP é 3. Usamos todas as
-# componentes disponíveis; o próprio classificador linear (LDA/SVM) atribui
-# pesos menores às componentes menos discriminativas.
+# Com apenas 3 canais, o máximo de componentes CSP é 3.
 CSP_N_COMPONENTS = 3
 
 # --------------------------------------------------------------------------

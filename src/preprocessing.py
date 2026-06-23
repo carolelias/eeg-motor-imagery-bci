@@ -76,28 +76,11 @@ def carregar_sessao_gdf(caminho_arquivo: str) -> mne.io.Raw:
             tipos_canal[canal] = "eog"
     raw.set_channel_types(tipos_canal, verbose=config.VERBOSE_MNE)
 
-    # Define explicitamente o esquema de referência do EEG. O Dataset 2b
-    # já fornece os 3 canais de EEG como derivações BIPOLARES (C3, Cz, C4
-    # medidos como diferença de potencial entre um par de eletrodos, e não
-    # em relação a uma referência comum única -- ver documentação oficial
-    # do dataset, seção "Data recording"). Por isso, não faz sentido
-    # aplicar uma referência de média ou de eletrodo único adicional aqui;
-    # usamos ref_channels=[] para informar ao MNE que os dados já estão em
-    # sua forma de referência final, apenas suprimindo o erro
-    # "No average reference for the EEG channels has been set" que o MNE
-    # levanta ao tentar realizar operações (como o cálculo de covariância
-    # dentro do CSP) sem que uma referência tenha sido explicitamente
-    # declarada.
+    # Os canais já são derivações bipolares — não se aplica referência adicional.
+    # ref_channels=[] apenas suprime o aviso interno do MNE sobre referência ausente.
     raw.set_eeg_reference(ref_channels=[], verbose=config.VERBOSE_MNE)
 
-    # Atribui a montagem padrão 10-20 para que os canais C3/Cz/C4 tenham
-    # posições espaciais conhecidas. Isso é necessário para que, mais
-    # adiante, o CSP.plot_patterns() consiga desenhar os mapas
-    # topográficos dos padrões espaciais (ver visualization.py). Como o
-    # arquivo .gdf original não traz coordenadas de eletrodo, usamos a
-    # montagem padrão e ignoramos silenciosamente canais que não constam
-    # nela (on_missing='warn' evita que a ausência de canais não-EEG,
-    # como os de EOG, interrompa a execução).
+    # Montagem padrão necessária para CSP.plot_patterns() desenhar os topomapas.
     montagem = mne.channels.make_standard_montage("standard_1020")
     raw.set_montage(montagem, on_missing="warn", verbose=config.VERBOSE_MNE)
 
@@ -108,13 +91,9 @@ def filtrar_sinal(raw: mne.io.Raw) -> mne.io.Raw:
     """Aplica filtragem temporal passa-banda (e, opcionalmente, notch) ao
     sinal de EEG/EOG.
 
-    O filtro passa-banda Butterworth (8-30 Hz) isola os ritmos Mu e Beta,
-    relevantes para os fenômenos de ERD/ERS durante imagética motora. A
-    filtragem é aplicada a todos os canais (EEG e EOG), pois a etapa
-    seguinte de remoção de artefatos por regressão linear (ver
-    `remover_artefatos_eog`) requer que ambos os sinais estejam na mesma
-    faixa de frequência para que a correlação entre eles seja calculada de
-    forma consistente.
+    Filtro Butterworth passa-banda (8-30 Hz) aplicado a todos os canais —
+    EEG e EOG precisam estar na mesma faixa para que a regressão de artefatos
+    subsequente estime a correlação entre eles de forma consistente.
 
     Parameters
     ----------
@@ -128,15 +107,7 @@ def filtrar_sinal(raw: mne.io.Raw) -> mne.io.Raw:
     """
     raw_filtrado = raw.copy()
 
-    # iir_params define explicitamente um filtro Butterworth de ordem fixa,
-    # em vez do filtro FIR padrão do MNE. Optamos pelo IIR Butterworth por
-    # ser o filtro classicamente empregado na literatura de BCI baseada em
-    # ERD/ERS (Pfurtscheller & Lopes da Silva, 1999) e por introduzir menor
-    # atraso de grupo do que um FIR de ordem equivalente. O parâmetro
-    # output='sos' (second-order sections) é usado em vez da representação
-    # clássica por função de transferência ('ba'), pois é numericamente
-    # mais estável, especialmente importante aqui já que o filtro é
-    # aplicado em cascata (passa-banda = passa-alta + passa-baixa).
+    # Butterworth IIR com output='sos' (numericamente mais estável que 'ba').
     iir_params = dict(order=config.FILTER_ORDER_IIR, ftype="butter", output="sos")
 
     raw_filtrado.filter(
@@ -159,15 +130,9 @@ def remover_artefatos_eog(raw: mne.io.Raw) -> mne.io.Raw:
     """Remove artefatos oculares dos canais de EEG por regressão linear
     contra os canais de EOG.
 
-    A documentação oficial do Dataset 2b recomenda explicitamente o uso de
-    técnicas como filtragem passa-alta ou regressão linear para remoção de
-    artefatos de EOG (Schlögl et al., 2007), e proíbe o uso direto dos
-    canais de EOG como entrada do classificador. A abordagem de regressão
-    linear (`mne.preprocessing.EOGRegression`) é apropriada para este
-    dataset porque ele possui apenas 3 canais de EEG -- um número
-    insuficiente para a aplicação robusta de ICA, que tipicamente requer
-    muito mais canais do que componentes a serem estimadas para convergir
-    de forma estável.
+    Regressão linear EOG→EEG recomendada pela documentação oficial do dataset
+    (Schlögl et al., 2007). ICA não é adequada aqui dado o número reduzido
+    de canais (3 EEG).
 
     Parameters
     ----------
@@ -184,11 +149,6 @@ def remover_artefatos_eog(raw: mne.io.Raw) -> mne.io.Raw:
     """
     raw_limpo = raw.copy()
 
-    # EOGRegression estima, por mínimos quadrados, o quanto de cada canal
-    # de EOG "contamina" cada canal de EEG, e subtrai essa contribuição
-    # estimada do sinal de EEG. É equivalente, em espírito, ao método
-    # clássico de Schlögl et al. (2007) referenciado na documentação
-    # oficial do dataset.
     modelo_regressao = mne.preprocessing.EOGRegression(
         picks="eeg", picks_artifact="eog"
     )
@@ -244,15 +204,10 @@ def extrair_eventos_motor_imagery(raw: mne.io.Raw):
             f"anotações do arquivo. Eventos disponíveis: {todos_event_id}"
         )
 
-    # O MNE atribui códigos internos sequenciais ao converter anotações GDF
-    # em eventos, e esses códigos variam entre arquivos de sessões diferentes
-    # (ex.: "770" pode virar 11 num arquivo e 5 em outro). Se usarmos esses
-    # códigos internos como valores no event_id e depois tentarmos concatenar
-    # épocas de sessões diferentes, mne.concatenate_epochs lança ValueError
-    # porque a mesma chave ("770") aponta para valores diferentes.
-    # A solução é normalizar: substituir os códigos internos pelos códigos
-    # originais do dataset (769 e 770), que são fixos e iguais em todas as
-    # sessões.
+    # O MNE atribui códigos internos que variam entre sessões (ex.: "770"
+    # pode virar 11 num arquivo e 5 em outro), o que causa ValueError ao
+    # concatenar épocas. Normalizamos para os códigos originais (769/770),
+    # fixos em todas as sessões.
     codigo_interno_esquerda = todos_event_id[chave_esquerda]
     codigo_interno_direita = todos_event_id[chave_direita]
 
@@ -398,13 +353,6 @@ def carregar_e_concatenar_sessoes(caminhos_arquivos: list) -> mne.Epochs:
         except RuntimeError as erro:
             print(f"  [aviso] {nome_arquivo}: {erro}; sessão ignorada.")
         except Exception as erro:  # pylint: disable=broad-except
-            # Captura ampla intencional: preferimos seguir processando as
-            # demais sessões/sujeitos do que interromper todo o experimento
-            # por causa de uma única sessão problemática. Incluímos o nome
-            # da classe da exceção (ex.: 'RuntimeError', 'ValueError') na
-            # mensagem para facilitar o diagnóstico de problemas futuros,
-            # já que exceções inesperadas do MNE costumam ter mensagens
-            # textuais muito parecidas com simples avisos informativos.
             print(f"  [aviso] {nome_arquivo}: erro inesperado "
                   f"({type(erro).__name__}: {erro}); sessão ignorada.")
 

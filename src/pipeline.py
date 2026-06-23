@@ -36,28 +36,19 @@ import preprocessing
 
 
 def montar_pipeline_lda() -> Pipeline:
-    """Monta a pipeline de classificação CSP + LDA.
+    """Monta a pipeline CSP + LDA.
 
-    O CSP é incorporado como uma etapa de transformação dentro da própria
-    Pipeline do scikit-learn (em vez de ser ajustado separadamente antes da
-    validação cruzada). Isso é importante metodologicamente: ao colocar o
-    CSP dentro da Pipeline, garantimos que, em cada fold da validação
-    cruzada, os filtros espaciais sejam recalculados usando apenas os
-    dados de treino daquele fold, evitando "vazamento de informação"
-    (data leakage) do conjunto de validação para dentro dos filtros CSP.
+    O CSP fica dentro da Pipeline para que os filtros espaciais sejam
+    reestimados a cada fold da validação cruzada, evitando data leakage.
 
     Returns
     -------
     pipeline : sklearn.pipeline.Pipeline
-        Pipeline com duas etapas: 'csp' (extração de características) e
-        'lda' (classificação).
     """
     csp = CSP(
         n_components=config.CSP_N_COMPONENTS,
         reg=None,
-        log=True,       # aplica log-variância às componentes (eq. 3 do
-                         # relatório), aproximando a distribuição das
-                         # características de uma Gaussiana
+        log=True,  # log-variância das componentes
         norm_trace=False,
     )
     lda = LinearDiscriminantAnalysis()
@@ -67,17 +58,14 @@ def montar_pipeline_lda() -> Pipeline:
 
 
 def montar_pipeline_svm() -> Pipeline:
-    """Monta a pipeline de classificação CSP + SVM (kernel RBF).
+    """Monta a pipeline CSP + SVM (kernel RBF).
 
-    Diferentemente do LDA, o SVM com kernel RBF é sensível à escala das
-    características de entrada. Por isso, antes do SVM, normalizamos as
-    características CSP para média 0 e variância unitária por meio do
-    StandardScaler.
+    O StandardScaler é necessário porque o SVM com kernel RBF é sensível
+    à escala das características.
 
     Returns
     -------
     pipeline : sklearn.pipeline.Pipeline
-        Pipeline com três etapas: 'csp', 'scaler' e 'svc'.
     """
     from sklearn.preprocessing import StandardScaler
 
@@ -175,12 +163,8 @@ def avaliar_em_teste(pipeline_treinada: Pipeline, X_teste: np.ndarray, y_teste: 
     independente, calculando acurácia, coeficiente Kappa e matriz de
     confusão.
 
-    Nota: esta função não é invocada no fluxo principal do projeto porque
-    os rótulos verdadeiros das sessões de avaliação (04E, 05E) foram
-    distribuídos pelos organizadores em formato MATLAB (.mat) separado,
-    não embutidos nos arquivos GDF. Caso os rótulos sejam carregados a
-    partir desse arquivo auxiliar, esta função pode ser usada diretamente
-    para a avaliação no conjunto de teste independente.
+    Nota: não é chamada no fluxo atual porque os rótulos das sessões de
+    avaliação (04E/05E) não estão nos arquivos GDF (ver config.py).
 
     Parameters
     ----------
