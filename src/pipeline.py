@@ -3,9 +3,13 @@
 pipeline.py
 
 Define as pipelines de classificação (CSP + LDA e CSP + SVM), a estratégia
-de avaliação (validação cruzada no conjunto de treino e avaliação final em
-conjunto de teste independente) e as funções que orquestram o experimento
-completo para um único sujeito ou para todos os sujeitos do dataset.
+de avaliação por validação cruzada sobre o conjunto de treino, e as funções
+que orquestram o experimento completo para um único sujeito.
+
+Nota: os rótulos de classe das sessões de avaliação (04E, 05E) não estão
+disponíveis nos arquivos GDF originais (ver config.TEST_SESSION_SUFFIXES);
+por isso, a métrica principal reportada é o Kappa de Cohen obtido pela
+validação cruzada 10-fold sobre as sessões de treino (01T + 02T + 03T).
 
 A métrica de desempenho oficial da BCI Competition IV é o coeficiente
 Kappa de Cohen, por descontar a taxa de acerto esperada ao acaso. Reporta-
@@ -171,6 +175,13 @@ def avaliar_em_teste(pipeline_treinada: Pipeline, X_teste: np.ndarray, y_teste: 
     independente, calculando acurácia, coeficiente Kappa e matriz de
     confusão.
 
+    Nota: esta função não é invocada no fluxo principal do projeto porque
+    os rótulos verdadeiros das sessões de avaliação (04E, 05E) foram
+    distribuídos pelos organizadores em formato MATLAB (.mat) separado,
+    não embutidos nos arquivos GDF. Caso os rótulos sejam carregados a
+    partir desse arquivo auxiliar, esta função pode ser usada diretamente
+    para a avaliação no conjunto de teste independente.
+
     Parameters
     ----------
     pipeline_treinada : sklearn.pipeline.Pipeline
@@ -204,12 +215,10 @@ def avaliar_sujeito(subject_id: int, verbose: bool = True) -> dict:
     """Executa a pipeline experimental completa para um único sujeito:
 
     1. Carrega e concatena as sessões de treino (01T, 02T, 03T).
-    2. Carrega e concatena as sessões de teste (04E, 05E), se disponíveis
-       e com rótulos.
-    3. Realiza validação cruzada no conjunto de treino para LDA e SVM
+    2. Realiza validação cruzada no conjunto de treino para LDA e SVM
        (incluindo busca em grade de hiperparâmetros para o SVM).
-    4. Treina os modelos finais no conjunto de treino completo e avalia em
-       teste (quando disponível).
+    3. Treina os modelos finais no conjunto de treino completo (usado
+       para geração de figuras e acesso aos filtros CSP ajustados).
 
     Parameters
     ----------

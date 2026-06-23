@@ -39,7 +39,7 @@ FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
 SUBJECT_IDS = list(range(1, 10))  # Sujeitos de 1 a 9
 
 TRAIN_SESSION_SUFFIXES = ["01T", "02T", "03T"]
-# Os arquivos GDF das sessões de avaliação (04E, 05E) não embtem os rótulos
+# Os arquivos GDF das sessões de avaliação (04E, 05E) não contêm os rótulos
 # de classe nos eventos — ambos os eventos 781 e 783 aparecem em TODOS os
 # trials independentemente da classe (são marcadores do protocolo de feedback
 # online, não rótulos). Os rótulos verdadeiros foram distribuídos pelos

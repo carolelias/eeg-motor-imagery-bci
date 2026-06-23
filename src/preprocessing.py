@@ -45,10 +45,9 @@ def carregar_sessao_gdf(caminho_arquivo: str) -> mne.io.Raw:
             f"(config.DATASET_DIR = '{config.DATASET_DIR}')."
         )
 
-    # stim_channel=False evita que o MNE tente (sem sucesso) interpretar
-    # algum canal como canal de estímulo; os eventos do Dataset 2b são
-    # lidos via anotações (ver mne.events_from_annotations), não via canal
-    # de estímulo dedicado.
+    # Os eventos do Dataset 2b estão embutidos como anotações no próprio
+    # arquivo GDF e são lidos posteriormente via mne.events_from_annotations.
+    # Não há canal de estímulo dedicado neste dataset.
     raw = mne.io.read_raw_gdf(
         caminho_arquivo,
         eog=config.RAW_EOG_CHANNEL_NAMES,
