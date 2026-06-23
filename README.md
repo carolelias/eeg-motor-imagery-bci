@@ -28,7 +28,9 @@ desenvolvida no âmbito do projeto de Iniciação Científica FAPESP
 
 ## Instalação
 
-Recomenda-se o uso de um ambiente virtual:
+As dependências do projeto estão listadas em `requirements.txt` (mne,
+numpy, scipy, scikit-learn, matplotlib e pandas). Recomenda-se o uso
+de um ambiente virtual para instalá-las:
 
 ```bash
 python -m venv venv
