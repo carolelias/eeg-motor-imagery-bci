@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 pipeline.py
 
@@ -6,14 +5,9 @@ Define as pipelines de classificação (CSP + LDA e CSP + SVM), a estratégia
 de avaliação por validação cruzada sobre o conjunto de treino, e as funções
 que orquestram o experimento completo para um único sujeito.
 
-Nota: os rótulos de classe das sessões de avaliação (04E, 05E) não estão
-disponíveis nos arquivos GDF originais (ver config.TEST_SESSION_SUFFIXES);
-por isso, a métrica principal reportada é o Kappa de Cohen obtido pela
-validação cruzada 10-fold sobre as sessões de treino (01T + 02T + 03T).
-
-A métrica de desempenho oficial da BCI Competition IV é o coeficiente
-Kappa de Cohen, por descontar a taxa de acerto esperada ao acaso. Reporta-
-mos também a acurácia simples, por ser mais facilmente interpretável.
+Os rótulos das sessões de avaliação (04E, 05E) não estão disponíveis nos
+arquivos GDF originais; a avaliação é feita por validação cruzada 10-fold
+sobre as sessões de treino (01T + 02T + 03T).
 """
 
 import time
@@ -27,7 +21,7 @@ from sklearn.metrics import (
     confusion_matrix,
 )
 from sklearn.metrics import make_scorer
-from sklearn.model_selection import GridSearchCV, KFold, cross_val_score, cross_validate
+from sklearn.model_selection import GridSearchCV, KFold, cross_val_predict, cross_val_score, cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.svm import SVC
 
@@ -83,11 +77,8 @@ def montar_pipeline_svm() -> Pipeline:
 
 
 def validacao_cruzada_treino(pipeline: Pipeline, X: np.ndarray, y: np.ndarray):
-    """Executa validação cruzada k-fold sobre o conjunto de TREINO.
-
-    Retorna acurácia e coeficiente Kappa de Cohen. O Kappa é a métrica
-    oficial da BCI Competition IV por descontar o acerto esperado ao acaso
-    em um classificador aleatório (50% para duas classes balanceadas).
+    """Executa validação cruzada k-fold e retorna acurácia, Kappa de Cohen
+    e matriz de confusão (out-of-fold) sobre o conjunto de treino.
 
     Parameters
     ----------
@@ -119,7 +110,16 @@ def validacao_cruzada_treino(pipeline: Pipeline, X: np.ndarray, y: np.ndarray):
     )
     accs = resultados["test_accuracy"]
     kappas = resultados["test_kappa"]
-    return accs.mean() * 100.0, accs.std() * 100.0, kappas.mean(), kappas.std()
+
+    # Previsões out-of-fold para a matriz de confusão — usa os mesmos splits
+    # do CV acima (mesmo random_state), garantindo consistência.
+    cv_oof = KFold(
+        n_splits=config.CV_N_SPLITS, shuffle=True, random_state=config.RANDOM_STATE
+    )
+    y_pred_oof = cross_val_predict(pipeline, X, y, cv=cv_oof)
+    cm = confusion_matrix(y, y_pred_oof)
+
+    return accs.mean() * 100.0, accs.std() * 100.0, kappas.mean(), kappas.std(), cm
 
 
 def ajustar_svm_com_grid_search(X: np.ndarray, y: np.ndarray) -> Pipeline:
@@ -258,7 +258,7 @@ def avaliar_sujeito(subject_id: int, verbose: bool = True) -> dict:
 
     t0 = time.time()
     pipeline_lda = montar_pipeline_lda()
-    cv_acc_lda, cv_std_lda, cv_kappa_lda, cv_kstd_lda = validacao_cruzada_treino(
+    cv_acc_lda, cv_std_lda, cv_kappa_lda, cv_kstd_lda, cm_lda = validacao_cruzada_treino(
         pipeline_lda, X_treino, y_treino
     )
     pipeline_lda.fit(X_treino, y_treino)
@@ -276,7 +276,7 @@ def avaliar_sujeito(subject_id: int, verbose: bool = True) -> dict:
 
     t0 = time.time()
     pipeline_svm_otima, melhores_parametros = ajustar_svm_com_grid_search(X_treino, y_treino)
-    cv_acc_svm, cv_std_svm, cv_kappa_svm, cv_kstd_svm = validacao_cruzada_treino(
+    cv_acc_svm, cv_std_svm, cv_kappa_svm, cv_kstd_svm, cm_svm = validacao_cruzada_treino(
         pipeline_svm_otima, X_treino, y_treino
     )
     tempo_svm = time.time() - t0
@@ -295,6 +295,7 @@ def avaliar_sujeito(subject_id: int, verbose: bool = True) -> dict:
         "lda_cv_kappa": cv_kappa_lda,
         "lda_cv_kappa_desvio": cv_kstd_lda,
         "pipeline_lda": pipeline_lda,
+        "lda_matriz_confusao": cm_lda,
         # SVM
         "svm_cv_acuracia": cv_acc_svm,
         "svm_cv_desvio": cv_std_svm,
@@ -302,6 +303,7 @@ def avaliar_sujeito(subject_id: int, verbose: bool = True) -> dict:
         "svm_cv_kappa_desvio": cv_kstd_svm,
         "svm_melhores_parametros": melhores_parametros,
         "pipeline_svm": pipeline_svm_otima,
+        "svm_matriz_confusao": cm_svm,
         # Dados brutos (úteis para as figuras geradas em visualization.py)
         "X_treino": X_treino,
         "y_treino": y_treino,
@@ -311,11 +313,8 @@ def avaliar_sujeito(subject_id: int, verbose: bool = True) -> dict:
 
 
 def _resultado_vazio(subject_id: int, motivo: str) -> dict:
-    """Retorna um dicionário de resultado "vazio" com todos os campos
-    numéricos como NaN, usado quando um sujeito não pôde ser processado
-    (ex.: arquivos ausentes). Mantém a estrutura do dicionário consistente
-    para que o restante do pipeline (agregação de resultados, tabelas,
-    etc.) não precise tratar este caso de forma especial em todo lugar.
+    """Retorna um dicionário com campos NaN/None para sujeitos que não
+    puderam ser processados, mantendo a estrutura consistente com os demais.
     """
     return {
         "subject_id": subject_id,

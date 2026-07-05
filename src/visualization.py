@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 visualization.py
 
@@ -13,16 +12,13 @@ Funções responsáveis por gerar as figuras do projeto:
 5. Gráfico de barras comparando acurácia e Kappa entre LDA e SVM para
    todos os sujeitos.
 
-Todas as figuras são salvas em disco (em config.FIGURES_DIR) no formato
-PNG, em resolução adequada para inclusão direta no relatório LaTeX.
+Todas as figuras são salvas na pasta results/figures/ no formato PNG.
 """
 
 import os
 
 import matplotlib
-matplotlib.use("Agg")  # backend não interativo: necessário para salvar
-                        # figuras em ambientes sem display (servidores,
-                        # execução em lote, etc.) sem lançar erros.
+matplotlib.use("Agg")  # backend sem display, necessário para execução em lote
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -113,14 +109,7 @@ def plotar_sinal_bruto_vs_filtrado(raw_bruto, raw_filtrado, subject_id: int,
 
 
 def plotar_padroes_csp(pipeline_treinada, info_mne, subject_id: int):
-    """Plota os padrões espaciais (spatial patterns) estimados pelo CSP
-    como topomapas, exibindo como cada componente CSP pondera os três
-    canais de EEG (C3, Cz, C4).
-
-    Como o Dataset 2b possui apenas 3 canais, o topomapa terá resolução
-    espacial limitada, mas ainda é informativo para ilustrar a
-    lateralização hemisférica esperada entre as classes de imagética
-    motora (maior peso em C3 para uma classe, em C4 para a outra).
+    """Plota os padrões espaciais estimados pelo CSP como topomapas.
 
     Parameters
     ----------
@@ -153,15 +142,8 @@ def plotar_padroes_csp(pipeline_treinada, info_mne, subject_id: int):
 
 
 def plotar_dispersao_caracteristicas_csp(pipeline_treinada, X_treino, y_treino, subject_id: int):
-    """Plota um gráfico de dispersão (scatter) das duas primeiras
-    componentes de características extraídas pelo CSP (log-variância),
-    coloridas de acordo com a classe verdadeira (mão esquerda / mão
-    direita).
-
-    Este gráfico permite visualizar, em duas dimensões, o quão separáveis
-    as duas classes se tornam após a filtragem espacial do CSP -- uma
-    inspeção visual direta da qualidade da extração de características
-    antes mesmo de aplicar o classificador.
+    """Plota a dispersão das duas primeiras componentes CSP (log-variância),
+    coloridas por classe (mão esquerda / mão direita).
 
     Parameters
     ----------
@@ -245,16 +227,8 @@ def plotar_matriz_confusao(matriz_confusao: np.ndarray, nome_modelo: str, subjec
 
 
 def plotar_comparacao_classificadores(df_resultados):
-    """Plota dois gráficos de barras lado a lado comparando, para cada
-    sujeito, a acurácia (%) e o coeficiente Kappa obtidos pelos
-    classificadores LDA e SVM no conjunto de teste.
-
-    Parameters
-    ----------
-    df_resultados : pandas.DataFrame
-        Tabela de resultados com (no mínimo) as colunas 'subject_id',
-        'lda_teste_acuracia', 'svm_teste_acuracia', 'lda_teste_kappa' e
-        'svm_teste_kappa'.
+    """Plota acurácia e Kappa de Cohen por sujeito (LDA vs. SVM),
+    obtidos na validação cruzada.
     """
     df_valido = df_resultados.dropna(subset=["lda_cv_acuracia", "svm_cv_acuracia"])
 
@@ -302,15 +276,8 @@ def plotar_comparacao_classificadores(df_resultados):
 
 
 def plotar_boxplot_validacao_cruzada(df_resultados):
-    """Plota um boxplot comparando a distribuição das acurácias de
-    validação cruzada (sobre o conjunto de treino) entre os classificadores
-    LDA e SVM, agregando todos os sujeitos.
-
-    Parameters
-    ----------
-    df_resultados : pandas.DataFrame
-        Tabela de resultados com as colunas 'lda_cv_acuracia' e
-        'svm_cv_acuracia'.
+    """Plota a distribuição de acurácia (CV) entre os 9 sujeitos para
+    LDA e SVM.
     """
     df_valido = df_resultados.dropna(subset=["lda_cv_acuracia", "svm_cv_acuracia"])
 

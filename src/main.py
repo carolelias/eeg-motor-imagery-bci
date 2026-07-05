@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 main.py
 
@@ -24,6 +23,7 @@ Saídas geradas:
     - Relatório impresso no terminal com um resumo geral do experimento.
 """
 
+import os
 import sys
 import time
 import warnings
@@ -36,21 +36,13 @@ import pipeline
 import preprocessing
 import visualization
 
-# Os avisos do MNE sobre, por exemplo, ausência de posições de eletrodo
-# para topomapas de baixa densidade de canais são esperados neste dataset
-# (apenas 3 canais de EEG) e não indicam um problema real na análise.
-# Suprimimo-los para manter a saída do terminal legível, mas erros
-# continuam sendo exibidos normalmente.
+# Suprime avisos esperados do MNE (ex.: baixa densidade de canais).
 warnings.filterwarnings("ignore", category=UserWarning, module="mne")
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="mne")
 
 
-SUJEITO_EXEMPLAR_FIGURAS = 1  # sujeito usado para as figuras ilustrativas
-                               # (sinal bruto/filtrado, padrões CSP,
-                               # scatter de características, matrizes de
-                               # confusão). Qualquer sujeito de 1 a 9 pode
-                               # ser escolhido; o sujeito 1 é usado por
-                               # convenção neste projeto.
+SUJEITO_EXEMPLAR_FIGURAS = 1  # sujeito usado para as figuras individuais
+                               # (sinal, padrões CSP, scatter, matrizes de confusão)
 
 
 def imprimir_cabecalho():
@@ -71,10 +63,8 @@ def imprimir_cabecalho():
 
 
 def montar_dataframe_resultados(lista_resultados: list) -> pd.DataFrame:
-    """Converte a lista de dicionários de resultado (um por sujeito) em
-    uma tabela pandas, descartando objetos pesados/não tabulares (como as
-    pipelines treinadas e os arrays de dados brutos) que não devem ser
-    exportados para o arquivo .csv final.
+    """Converte a lista de resultados por sujeito em um DataFrame,
+    mantendo apenas as colunas exportáveis para o CSV.
     """
     colunas_para_tabela = [
         "subject_id", "n_epocas_treino",
@@ -139,19 +129,14 @@ def imprimir_tabela_resumo(df_resultados: pd.DataFrame):
 
 
 def gerar_figuras_sujeito_exemplar(resultado_exemplar: dict):
-    """Gera o conjunto de figuras ilustrativas (sinal bruto/filtrado,
-    padrões CSP, scatter de características e matrizes de confusão) para
-    um único sujeito exemplar, evitando gerar centenas de figuras
-    repetitivas para todos os 9 sujeitos.
+    """Gera as figuras ilustrativas para um único sujeito exemplar: sinal
+    bruto/filtrado, padrões CSP, scatter de características e matrizes de
+    confusão (out-of-fold) para LDA e SVM.
     """
     subject_id = resultado_exemplar["subject_id"]
     print(f"\nGerando figuras ilustrativas para o sujeito {subject_id}...")
 
-    # Figura 1: sinal bruto vs. filtrado. Carregamos a primeira sessão de
-    # treino novamente (de forma independente do restante da pipeline)
-    # apenas para fins de visualização, já que o objeto Raw bruto não é
-    # mantido em memória após o epoching para economizar RAM durante o
-    # processamento em lote dos 9 sujeitos.
+    # Figura 1: sinal bruto vs. filtrado (Raw não é mantido após o epoching).
     try:
         caminho_sessao_exemplar = (
             f"{config.DATASET_DIR}/"
@@ -186,9 +171,16 @@ def gerar_figuras_sujeito_exemplar(resultado_exemplar: dict):
         print(f"  [aviso] Não foi possível gerar o scatter de "
               f"características: {erro}")
 
-    # Matrizes de confusão: não geradas porque a avaliação é por CV
-    # (os rótulos das sessões de avaliação 04E/05E não estão disponíveis
-    # nos arquivos GDF; ver comentário em config.TEST_SESSION_SUFFIXES).
+    # Figuras 4 e 5: matrizes de confusão (out-of-fold, do CV de treino).
+    try:
+        visualization.plotar_matriz_confusao(
+            resultado_exemplar["lda_matriz_confusao"], "LDA", subject_id
+        )
+        visualization.plotar_matriz_confusao(
+            resultado_exemplar["svm_matriz_confusao"], "SVM", subject_id
+        )
+    except Exception as erro:  # pylint: disable=broad-except
+        print(f"  [aviso] Não foi possível gerar as matrizes de confusão: {erro}")
 
 
 def main():
@@ -207,10 +199,8 @@ def main():
     df_resultados = montar_dataframe_resultados(lista_resultados)
     imprimir_tabela_resumo(df_resultados)
 
-    config_dir_results = config.RESULTS_DIR
-    import os
-    os.makedirs(config_dir_results, exist_ok=True)
-    caminho_csv = os.path.join(config_dir_results, "tabela_resultados.csv")
+    os.makedirs(config.RESULTS_DIR, exist_ok=True)
+    caminho_csv = os.path.join(config.RESULTS_DIR, "tabela_resultados.csv")
     df_resultados.to_csv(caminho_csv, index=False)
     print(f"\nTabela de resultados salva em: {caminho_csv}")
 

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+dataset/
+results/figures/
+results/*.csv
+.DS_Store

@@ -1,13 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 config.py
 
 Arquivo central de configuração do projeto de classificação binária de
 sinais de EEG (imagética motora de mão esquerda vs. mão direita), utilizando
 o Dataset 2b da BCI Competition IV.
-
-Manter todos os parâmetros aqui facilita a reprodutibilidade dos
-experimentos e evita "números mágicos" espalhados pelo código.
 """
 
 import os
@@ -15,11 +11,7 @@ import os
 # --------------------------------------------------------------------------
 # Caminhos do projeto
 # --------------------------------------------------------------------------
-# Pasta onde estão os arquivos .gdf baixados do site da BCI Competition IV.
-# Estrutura esperada: dataset/B0101T.gdf, dataset/B0102T.gdf, ...
 DATASET_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dataset")
-
-# Pasta onde resultados (tabelas .csv e figuras) serão salvos.
 RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "results")
 FIGURES_DIR = os.path.join(RESULTS_DIR, "figures")
 
@@ -54,7 +46,7 @@ def subject_filename(subject_id: int, suffix: str) -> str:
 RAW_EEG_CHANNEL_NAMES = ["EEG:C3", "EEG:Cz", "EEG:C4"]
 RAW_EOG_CHANNEL_NAMES = ["EOG:ch01", "EOG:ch02", "EOG:ch03"]
 
-# Nomes padronizados (mais limpos) que usaremos após o carregamento.
+# Nomes simplificados usados internamente.
 EEG_CHANNEL_RENAME_MAP = {
     "EEG:C3": "C3",
     "EEG:Cz": "Cz",
@@ -85,10 +77,7 @@ CLASS_LABELS = {EVENT_CUE_LEFT: "Mão Esquerda", EVENT_CUE_RIGHT: "Mão Direita"
 # --------------------------------------------------------------------------
 SAMPLING_FREQUENCY = 250.0  # Hz (fixo para o Dataset 2b, ver documentação)
 
-# Filtro passa-banda Butterworth. A faixa 8-30 Hz cobre os ritmos Mu (8-12Hz)
-# e Beta (13-30Hz), que concentram a maior parte da informação relevante
-# para ERD/ERS durante imagética motora (Pfurtscheller & Lopes da Silva,
-# 1999).
+# Faixa 8-30 Hz: ritmos Mu e Beta, relevantes para ERD/ERS em imagética motora.
 BANDPASS_LOW_FREQ = 8.0
 BANDPASS_HIGH_FREQ = 30.0
 FILTER_ORDER_IIR = 4  # ordem do filtro Butterworth
@@ -109,8 +98,7 @@ EPOCH_TMAX = 3.5
 BASELINE_TMIN = -1.0
 BASELINE_TMAX = 0.0
 
-# Rejeição de épocas por amplitude excessiva (MNE usa Volts internamente).
-REJECT_PEAK_TO_PEAK = dict(eeg=150e-6)  # 150 µV
+REJECT_PEAK_TO_PEAK = dict(eeg=150e-6)  # 150 µV pico-a-pico
 
 # --------------------------------------------------------------------------
 # Parâmetros de extração de características (CSP)
@@ -124,7 +112,7 @@ CSP_N_COMPONENTS = 3
 CV_N_SPLITS = 10
 RANDOM_STATE = 42  # semente fixa para reprodutibilidade dos experimentos
 
-# Grade de hiperparâmetros para a busca em grade (GridSearchCV) do SVM.
+# Grade de busca para os hiperparâmetros do SVM.
 SVM_PARAM_GRID = {
     "svc__C": [0.1, 1, 10, 100],
     "svc__gamma": ["scale", 0.01, 0.1, 1],
@@ -134,5 +122,4 @@ SVM_KERNEL = "rbf"
 # --------------------------------------------------------------------------
 # Outros parâmetros
 # --------------------------------------------------------------------------
-VERBOSE_MNE = False  # silencia o log interno do MNE (deixamos nossos
-                      # próprios prints mais legíveis no terminal)
+VERBOSE_MNE = False  # desativa o log do MNE

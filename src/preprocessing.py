@@ -1,15 +1,9 @@
-# -*- coding: utf-8 -*-
 """
 preprocessing.py
 
-Funções responsáveis por carregar os arquivos .gdf do Dataset 2b da BCI
-Competition IV, padronizar os canais, aplicar filtragem temporal, remover
-artefatos de EOG e segmentar o sinal em épocas (trials) de imagética
-motora.
-
-Cada função tem uma única responsabilidade, o que facilita testar e
-depurar separadamente cada etapa da pipeline (carregamento, filtragem,
-remoção de artefatos e epoching).
+Funções de pré-processamento do Dataset 2b da BCI Competition IV:
+carregamento dos arquivos .gdf, filtragem temporal, remoção de artefatos
+de EOG e segmentação em épocas de imagética motora.
 """
 
 import os
@@ -45,9 +39,7 @@ def carregar_sessao_gdf(caminho_arquivo: str) -> mne.io.Raw:
             f"(config.DATASET_DIR = '{config.DATASET_DIR}')."
         )
 
-    # Os eventos do Dataset 2b estão embutidos como anotações no próprio
-    # arquivo GDF e são lidos posteriormente via mne.events_from_annotations.
-    # Não há canal de estímulo dedicado neste dataset.
+    # Eventos lidos das anotações embutidas no GDF; não há canal de estímulo dedicado.
     raw = mne.io.read_raw_gdf(
         caminho_arquivo,
         eog=config.RAW_EOG_CHANNEL_NAMES,
@@ -55,9 +47,7 @@ def carregar_sessao_gdf(caminho_arquivo: str) -> mne.io.Raw:
         verbose=config.VERBOSE_MNE,
     )
 
-    # Renomeia os canais para nomes mais legíveis. Usamos apenas as chaves
-    # de fato presentes no arquivo, pois alguns arquivos podem ter pequenas
-    # variações na grafia dos nomes de canal entre sujeitos.
+    # Filtra o mapa para considerar apenas canais presentes no arquivo.
     rename_map = {
         canal_original: canal_novo
         for canal_original, canal_novo in config.EEG_CHANNEL_RENAME_MAP.items()
@@ -182,14 +172,8 @@ def extrair_eventos_motor_imagery(raw: mne.io.Raw):
         raw, verbose=config.VERBOSE_MNE
     )
 
-    # As anotações do MNE para arquivos GDF da BCI Competition usam como
-    # chave a representação em string do código do evento (ex.: '769'),
-    # prefixada ocasionalmente por zeros à esquerda dependendo da versão
-    # do MNE. Por isso, buscamos a chave de forma robusta.
-    # Tenta primeiro os códigos das sessões de treino (769/770); se não
-    # encontrar, tenta os códigos das sessões de avaliação (781/783).
-    # Ambos marcam o mesmo momento funcional (onset do cue/rótulo de classe),
-    # mas o Dataset 2b usa valores diferentes entre treino e avaliação.
+    # Tenta códigos de treino (769/770); se ausentes, tenta os de avaliação (781/783).
+    # A busca usa _buscar_chave_evento por tolerância a variações de formatação do MNE.
     chave_esquerda = _buscar_chave_evento(todos_event_id, config.EVENT_CUE_LEFT)
     chave_direita = _buscar_chave_evento(todos_event_id, config.EVENT_CUE_RIGHT)
 
@@ -224,15 +208,8 @@ def extrair_eventos_motor_imagery(raw: mne.io.Raw):
 
 
 def _buscar_chave_evento(event_id_dict: dict, codigo_evento: int):
-    """Busca, de forma tolerante a formatação, a chave do dicionário
-    `event_id_dict` que corresponde ao código numérico `codigo_evento`.
-
-    O MNE converte anotações para strings com diferentes formatações
-    dependendo da versão (ex.: '769', '769.0' ou, em tese, com zeros à
-    esquerda). Em vez de comparar strings diretamente, convertemos cada
-    chave para um número de ponto flutuante e comparamos numericamente,
-    o que torna a busca robusta a qualquer uma dessas variações de
-    formatação.
+    """Retorna a chave de event_id_dict correspondente a codigo_evento,
+    tolerando variações de formatação de string do MNE ('769', '769.0', etc.).
     """
     for chave in event_id_dict.keys():
         try:
@@ -275,12 +252,7 @@ def criar_epocas(raw_limpo: mne.io.Raw, events: np.ndarray, event_id: dict) -> m
         tmin=config.EPOCH_TMIN,
         tmax=config.EPOCH_TMAX,
         picks="eeg",
-        baseline=None,  # a normalização de baseline não é aplicada aqui,
-                        # pois a janela de análise já foi deslocada
-                        # especificamente para começar após o transiente
-                        # visual do cue; uma correção de baseline usando
-                        # um período anterior ao cue poderia reintroduzir
-                        # a influência do VEP nas características CSP.
+        baseline=None,  # janela já inicia após o transiente visual do cue
         reject=config.REJECT_PEAK_TO_PEAK,
         preload=True,
         verbose=config.VERBOSE_MNE,
