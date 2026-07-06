@@ -98,5 +98,4 @@ do SVM); o tempo total estimado é de 15 a 30 minutos.
 
 Carolina Elias de Almeida Américo — aluna de graduação  
 Prof. Dr. Leonardo André Ambrosio — orientador  
-Instituto de Física de São Carlos (IFSC/USP)  
 Projeto de Iniciação Científica FAPESP, processo 2024/17737-0.
